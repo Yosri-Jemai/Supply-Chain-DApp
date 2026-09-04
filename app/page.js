@@ -1,9 +1,14 @@
-import Image from "next/image";
+"use client";
+
+import React, { useContext } from "react";
+import { TrackingContext } from "../Context/Tracking";
 
 export default function Home() {
+  const { title } = useContext(TrackingContext);
+
   return (
-    <h1 className="text-3xl font-bold underline">
-      Hello world!
-    </h1>
+    <main>
+      <h1>{title}</h1>
+    </main>
   );
 }

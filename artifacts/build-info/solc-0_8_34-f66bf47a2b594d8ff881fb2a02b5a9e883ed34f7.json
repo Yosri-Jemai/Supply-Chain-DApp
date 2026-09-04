@@ -1,0 +1,42 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_34-f66bf47a2b594d8ff881fb2a02b5a9e883ed34f7",
+  "solcVersion": "0.8.34",
+  "solcLongVersion": "0.8.34+commit.80d5c536",
+  "compilerType": "solc",
+  "userSourceNameMap": {
+    "contracts/Tracking.sol": "project/contracts/Tracking.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "osaka",
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/Tracking.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.0;\r\n\r\ncontract Tracking {\r\n    enum ShipmentStatus {PENDING, IN_TRANSITION, DELIVERED, CANCELLED}\r\n\r\n    struct Shipment {\r\n        address sender;\r\n        address receiver;\r\n        uint256 pickupTime;\r\n        uint256 deliveryTime;\r\n        uint256 distance;\r\n        uint256 price;\r\n        ShipmentStatus status;\r\n        bool isPaid;\r\n    }\r\n    mapping(address => Shipment[]) public shipments;\r\n\r\n    uint public shipmentCount;\r\n\r\n    struct TypeShipment {\r\n        address sender;\r\n        address receiver;\r\n        uint256 pickupTime;\r\n        uint256 deliveryTime;\r\n        uint256 distance;\r\n        uint256 price;\r\n        ShipmentStatus status;\r\n        bool isPaid;\r\n    }\r\n\r\n    TypeShipment[] public typeShipments;\r\n\r\n    event ShipmentCreated(address indexed sender, address indexed receiver, uint256 pickupTime, uint256 distance, uint256 price);\r\n\r\n    event ShipmentInTransition(address indexed sender, address indexed receiver, uint256 pickupTime);\r\n\r\n    event ShipmentDelivered(address indexed sender, address indexed receiver, uint256 deliveryTime);\r\n\r\n    event ShipmentCancelled(address indexed sender, address indexed receiver, uint256 pickupTime);\r\n\r\n    event ShipmentPaid(address indexed sender, address indexed receiver, uint256 amount);\r\n\r\n    constructor() {\r\n        shipmentCount = 0;\r\n    }\r\n\r\n    function createShipment(address _receiver, uint256 _pickupTime, uint256 _distance, uint256 _price) public payable {\r\n        require(msg.value >= _price, \"Insufficient payment for shipment\");\r\n        Shipment memory newShipment = Shipment(msg.sender, _receiver, _pickupTime, 0, _distance, _price, ShipmentStatus.PENDING, false);\r\n        shipments[msg.sender].push(newShipment);\r\n        shipmentCount++;\r\n        typeShipments.push(TypeShipment(msg.sender, _receiver, _pickupTime, 0, _distance, _price, ShipmentStatus.PENDING, false));\r\n        emit ShipmentCreated(msg.sender, _receiver, _pickupTime, _distance, _price);\r\n    }\r\n\r\n    function StartShipment(address _sender, address _receiver, uint256 _index) public {\r\n        Shipment storage shipment = shipments[_sender][_index];\r\n        TypeShipment storage typeShipment = typeShipments[_index];\r\n        require(shipment.receiver == _receiver,\"Invalid receiver\");\r\n        require(shipment.status == ShipmentStatus.PENDING, \"Shipment is not pending\");\r\n        shipment.status = ShipmentStatus.IN_TRANSITION;\r\n        typeShipment.status = ShipmentStatus.IN_TRANSITION;\r\n        emit ShipmentInTransition(_sender, shipment.receiver, shipment.pickupTime);\r\n    }\r\n\r\n    function cancelShipment(address _sender, address _receiver, uint256 _index) public {\r\n        Shipment storage shipment = shipments[_sender][_index];\r\n        TypeShipment storage typeShipment = typeShipments[_index];\r\n        require(shipment.receiver == _receiver, \"Invalid receiver\");\r\n        require(shipment.status == ShipmentStatus.PENDING, \"Shipment is not pending\");\r\n        require(!shipment.isPaid, \"Shipment is already paid\");\r\n        shipment.status = ShipmentStatus.CANCELLED;\r\n        typeShipment.status = ShipmentStatus.CANCELLED;\r\n        uint256 amount = shipment.price;\r\n        (bool success, ) = payable(shipment.sender).call{value: amount}(\"\");\r\n        require(success, \"Refund failed\");\r\n        emit ShipmentCancelled(_sender, _receiver, shipment.pickupTime);\r\n    }\r\n\r\n    function completeShipment(address _sender, address _receiver, uint256 _index) public {\r\n        Shipment storage shipment = shipments[_sender][_index];\r\n        TypeShipment storage typeShipment = typeShipments[_index];\r\n        require(shipment.receiver == _receiver,\"Invalid receiver\");\r\n        require(shipment.status == ShipmentStatus.IN_TRANSITION, \"Shipment is not in transition\");\r\n        require(!shipment.isPaid, \"Shipment is already paid\");\r\n        shipment.status = ShipmentStatus.DELIVERED;\r\n        shipment.deliveryTime = block.timestamp;\r\n        typeShipment.status = ShipmentStatus.DELIVERED;\r\n        typeShipment.deliveryTime = block.timestamp;\r\n        uint256 amount = shipment.price;\r\n        (bool success, ) = payable(shipment.sender).call{value: amount}(\"\");\r\n        require(success, \"Payment failed\");\r\n        shipment.isPaid = true;\r\n        typeShipment.isPaid = true;\r\n        emit ShipmentDelivered(_sender, _receiver, shipment.deliveryTime);\r\n        emit ShipmentPaid(_sender, _receiver, amount);\r\n    }\r\n\r\n    function getShipment(address _sender, uint256 _index) public view returns (address, address, uint256, uint256, uint256, uint256, ShipmentStatus, bool) {\r\n        Shipment storage shipment = shipments[_sender][_index];\r\n        return (shipment.sender, shipment.receiver, shipment.pickupTime, shipment.deliveryTime, shipment.distance, shipment.price, shipment.status, shipment.isPaid);\r\n    }\r\n\r\n    function getShipmentCount(address _sender) public view returns (uint256) {\r\n        return shipments[_sender].length;\r\n    }\r\n\r\n    function getAllTransactions() public view returns (TypeShipment[] memory) {\r\n        return typeShipments;\r\n    }\r\n}"
+      }
+    }
+  }
+}
